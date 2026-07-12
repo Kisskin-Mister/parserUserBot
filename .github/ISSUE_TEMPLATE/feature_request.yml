@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep requests public-safe. Do not include credentials, private chats, resumes, or personal data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What use case or limitation should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context

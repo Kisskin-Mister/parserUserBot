@@ -218,6 +218,33 @@ class Database:
             )
             return row is not None
 
+
+    async def recruiter_private_notification_exists(self, chat_id, message_id):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 1
+                FROM recruiter_private_notifications
+                WHERE chat_id = $1 AND message_id = $2
+                LIMIT 1
+                """,
+                chat_id,
+                message_id,
+            )
+            return row is not None
+
+    async def add_recruiter_private_notification(self, chat_id, message_id):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO recruiter_private_notifications (chat_id, message_id)
+                VALUES ($1, $2)
+                ON CONFLICT (chat_id, message_id) DO NOTHING
+                """,
+                chat_id,
+                message_id,
+            )
+
     async def add_vacancy_outbox_entry(self, vacancy_id, recruiter_username, command_type, payload):
         async with self.pool.acquire() as conn:
             await conn.execute(

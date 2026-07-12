@@ -1,7 +1,7 @@
 # OpenClaw Integration Guide
 
 ## Project Context
-- **Root:** `/Users/kisskin/PycharmProjects/parserUserBot`
+- **Root:** `/path/to/parserUserBot`
 - **Main Agent:** Codex (Full access)
 - **Sentinel Agent:** Qwen (LM Studio @ localhost:1234)
 

@@ -84,7 +84,7 @@ Lines 52-57: `get_job_status()` runs `launchctl print`, which is macOS-specific.
 ### 2.5 `callback_dispatcher.py` — hardcoded macOS paths
 
 Lines 48-54: `_resolve_openclaw_bin()` searches for `openclaw` at:
-- `/Users/kisskin/.nvm/versions/node/v24.12.0/bin/openclaw`
+- `/path/to/node/bin/openclaw`
 - `/opt/homebrew/bin/openclaw`
 - `/usr/local/bin/openclaw`
 
@@ -130,7 +130,7 @@ Lines 127-140 and 222-239: Both iterate unread dialogs and process messages. `sy
 
 `.env.example` contains **actual real values**:
 - `API_ID=23383794` (real Telegram API ID)
-- `API_HASH=e8af22b183bc423ba840faa9ad31ea17` (real API hash — this is a secret)
+- `API_HASH=<redacted-telegram-api-hash>` (real API hash — this is a secret)
 - `PHONE_NUMBER=+799****4302` (partially redacted but real)
 - `LOG_CHAT_ID=-1002589610632` (real chat ID)
 
@@ -282,7 +282,7 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=kisskin
+User=parseruserbot
 WorkingDirectory=/mnt/ssd/projects/parserUserBot
 ExecStart=/mnt/ssd/projects/parserUserBot/.venv/bin/python main.py
 Restart=always

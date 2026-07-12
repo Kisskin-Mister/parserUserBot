@@ -1,14 +1,13 @@
 [Unit]
 Description=parserUserBot — trigger worker (produces callback outbox entries)
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
 
 [Service]
 Type=oneshot
-User=kisskin
-WorkingDirectory=/mnt/ssd/projects/parserUserBot
-ExecStart=/usr/bin/python3 /mnt/ssd/projects/parserUserBot/trigger_worker.py --once
-EnvironmentFile=/mnt/ssd/projects/parserUserBot/.env
-
+User=parseruserbot
+WorkingDirectory=/opt/parserUserBot
+EnvironmentFile=/opt/parserUserBot/.env
+ExecStart=/opt/parserUserBot/.venv/bin/python /opt/parserUserBot/trigger_worker.py --once
 StandardOutput=journal
 StandardError=journal

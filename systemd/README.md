@@ -1,49 +1,24 @@
-# systemd service files for parserUserBot
+# systemd service files
 
-These files deploy parserUserBot as systemd services on Linux (Raspberry Pi).
-
-## Components
-
-| File | Purpose | Type |
-|---|---|---|
-| `parserUserBot-main.service` | Telegram client daemon | long-running |
-| `parserUserBot-trigger.service` | Produces callback outbox entries | oneshot |
-| `parserUserBot-trigger.timer` | Runs trigger every 30s | timer |
-| `parserUserBot-dispatcher.service` | Sends outbox entries to OpenClaw | oneshot |
-| `parserUserBot-dispatcher.timer` | Runs dispatcher every 30s | timer |
-
-## Install
+These are production templates for Linux. Before copying them into `/etc/systemd/system/`, replace `/opt/parserUserBot` and `User=parseruserbot` if your checkout or service account differs.
 
 ```bash
-# Copy service files
-sudo cp systemd/*.service systemd/*.timer /etc/systemd/system/
-
-# Reload systemd
+sudo useradd --system --home /opt/parserUserBot --shell /usr/sbin/nologin parseruserbot || true
+sudo mkdir -p /opt
+sudo cp -a /path/to/parserUserBot /opt/parserUserBot
+sudo chown -R parseruserbot:parseruserbot /opt/parserUserBot
+sudo cp /opt/parserUserBot/systemd/*.service /opt/parserUserBot/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-
-# Enable and start the main daemon
 sudo systemctl enable --now parserUserBot-main.service
-
-# Enable and start the timers (trigger + dispatcher)
-sudo systemctl enable --now parserUserBot-trigger.timer
-sudo systemctl enable --now parserUserBot-dispatcher.timer
+sudo systemctl enable --now parserUserBot-trigger.timer parserUserBot-dispatcher.timer
 ```
 
-## Monitor
+Monitor:
 
 ```bash
-# Check status
-sudo systemctl status parserUserBot-main
-sudo systemctl list-timers parserUserBot-*
-
-# View logs
-journalctl -u parserUserBot-main -f
-journalctl -u parserUserBot-trigger -f
+systemctl status parserUserBot-main.service
+systemctl list-timers 'parserUserBot-*'
+journalctl -u parserUserBot-main.service -f
+journalctl -u parserUserBot-trigger.service -f
+journalctl -u parserUserBot-dispatcher.service -f
 ```
-
-## Notes
-
-- Adjust `ExecStart` paths if using a virtualenv (replace `/usr/bin/python3` with `.venv/bin/python`)
-- Adjust `User=` if running as a different user
-- The `.env` file must exist at the `EnvironmentFile` path
-- PostgreSQL must be running before the bot starts
