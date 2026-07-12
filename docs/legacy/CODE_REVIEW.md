@@ -131,7 +131,7 @@ Lines 127-140 and 222-239: Both iterate unread dialogs and process messages. `sy
 `.env.example` contains **actual real values**:
 - `API_ID=23383794` (real Telegram API ID)
 - `API_HASH=<redacted-telegram-api-hash>` (real API hash — this is a secret)
-- `PHONE_NUMBER=+799****4302` (partially redacted but real)
+- `PHONE_NUMBER=<redacted-phone-number>` (real value removed for public release)
 - `LOG_CHAT_ID=-1002589610632` (real chat ID)
 
 **The `.env.example` file should contain only placeholder values**, not real credentials. The actual `.env` is correctly gitignored, but `.env.example` is committed to the repo.
@@ -140,7 +140,7 @@ Lines 127-140 and 222-239: Both iterate unread dialogs and process messages. `sy
 ```
 API_ID=your_api_id_here
 API_HASH=your_api_hash_here
-PHONE_NUMBER=+1234567890
+PHONE_NUMBER=your_phone_number_here
 ```
 
 ### 3.2 🟡 `.session` files are gitignored (good)

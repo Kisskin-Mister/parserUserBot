@@ -6,7 +6,7 @@ Telegram user-account parser for Java/Go vacancies and IT news, with a PostgreSQ
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/Kisskin-Mister/parserUserBot/actions/workflows/ci.yml/badge.svg)](https://github.com/Kisskin-Mister/parserUserBot/actions/workflows/ci.yml)
+[![Telegram Userbot](https://img.shields.io/badge/Telegram-userbot-blue.svg)](https://docs.pyrogram.org/)
 
 </div>
 
