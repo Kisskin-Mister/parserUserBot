@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-parseruserbot}
+      POSTGRES_USER: ${POSTGRES_USER:-parseruserbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parseruserbot_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-parseruserbot} -d ${POSTGRES_DB:-parseruserbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - telegram_session:/app/session
+      - ./runtime:/app/runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+    command: ["python", "main.py"]
+    volumes:
+      - telegram_session:/app/session
+      - ./runtime:/app/runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  telegram_session:

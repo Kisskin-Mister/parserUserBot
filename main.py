@@ -15,6 +15,7 @@ from classifier import classify_post
 from database import Database
 from dashboard import Dashboard
 from message_policy import is_recruiter_private_message, should_mark_chat_as_read
+from parser_engine import AIClassifier, match_parser_config
 
 load_dotenv()
 
@@ -26,10 +27,16 @@ PHONE_NUMBER = os.getenv("PHONE_NUMBER")
 CALLBACK_SPOOL_DIR = Path(os.getenv("OPENCLAW_CALLBACK_SPOOL_DIR", "runtime/callback_spool"))
 CALLBACK_SENT_DIR = Path(os.getenv("OPENCLAW_CALLBACK_SENT_DIR", "runtime/callback_sent"))
 CALLBACK_FAILED_DIR = Path(os.getenv("OPENCLAW_CALLBACK_FAILED_DIR", "runtime/callback_failed"))
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+FORWARD_MODE = os.getenv("FORWARD_MODE", "forward")
 
-app = Client("my_account", api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_NUMBER)
+SESSION_NAME = os.getenv("SESSION_NAME", "my_account")
+app = Client(SESSION_NAME, api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_NUMBER)
 db = Database()
 dash = Dashboard()
+ai_classifier = AIClassifier(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY, model=OPENAI_MODEL)
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +108,63 @@ async def process_message(client, message, is_initial=False):
         if not text or text == "[No Text]":
             return
         if str(chat_id) == LOG_CHAT_ID:
+            return
+
+        handled_by_unified_parser = False
+        for parser in await db.list_parser_configs(active_only=True):
+            source_ids = [str(x) for x in (parser.get("source_chat_ids") or [])]
+            if source_ids and str(chat_id) not in source_ids:
+                continue
+
+            first_seen = await db.try_mark_message_processing(parser["id"], chat_id, message.id)
+            if not first_seen:
+                continue
+
+            result = await match_parser_config(text, parser, ai_classifier)
+            target_message_id = None
+            target_chat_id = parser["target_chat_id"]
+            if result.matched:
+                try:
+                    if FORWARD_MODE == "copy":
+                        sent = await client.send_message(target_chat_id, text)
+                    else:
+                        sent = await client.forward_messages(
+                            chat_id=target_chat_id,
+                            from_chat_id=chat_id,
+                            message_ids=[message.id],
+                        )
+                    target_message_id = getattr(sent, "id", None)
+                    dash.update_stats(last_action=f"Parser {parser['id']} matched")
+                except Exception as exc:
+                    await db.mark_processed_message(
+                        parser["id"],
+                        chat_id,
+                        message.id,
+                        True,
+                        target_chat_id=target_chat_id,
+                        target_message_id=None,
+                        error=str(exc),
+                    )
+                    handled_by_unified_parser = True
+                    continue
+
+            await db.mark_processed_message(
+                parser["id"],
+                chat_id,
+                message.id,
+                result.matched,
+                target_chat_id=target_chat_id if result.matched else None,
+                target_message_id=target_message_id,
+                error=result.error,
+            )
+            handled_by_unified_parser = True
+
+        # Legacy HR/news behavior remains as a compatibility fallback while users
+        # migrate to API-managed parser_configs. If at least one unified parser
+        # processed the message, do not also write old vacancy/news rows.
+        if handled_by_unified_parser:
+            if should_mark_chat_as_read(message):
+                await client.read_chat_history(chat_id)
             return
 
         post_type, tech = classify_post(text)

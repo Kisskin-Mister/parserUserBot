@@ -9,8 +9,17 @@ load_dotenv()
 
 class Database:
     def __init__(self):
-        self.url = os.getenv("DATABASE_URL")
+        self.url = os.getenv("DATABASE_URL") or self._build_database_url_from_env()
         self.pool = None
+
+    @staticmethod
+    def _build_database_url_from_env():
+        host = os.getenv("POSTGRES_HOST", "localhost")
+        port = os.getenv("POSTGRES_PORT", "5432")
+        db = os.getenv("POSTGRES_DB", "parseruserbot")
+        user = os.getenv("POSTGRES_USER", "parseruserbot")
+        password = os.getenv("POSTGRES_PASSWORD", "parseruserbot_change_me")
+        return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
     async def init(self):
         if not self.pool:
@@ -132,6 +141,40 @@ class Database:
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_callback_outbox_status_next_attempt
                 ON callback_outbox(status, next_attempt_at)
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS parser_configs (
+                    id BIGSERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    mode TEXT NOT NULL CHECK (mode IN ('keyword', 'ai')),
+                    source_chat_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    target_chat_id BIGINT NOT NULL,
+                    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_parser_configs_enabled
+                ON parser_configs(enabled)
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS processed_messages (
+                    parser_id BIGINT NOT NULL REFERENCES parser_configs(id) ON DELETE CASCADE,
+                    source_chat_id BIGINT NOT NULL,
+                    message_id BIGINT NOT NULL,
+                    matched BOOLEAN NOT NULL DEFAULT FALSE,
+                    target_chat_id BIGINT,
+                    target_message_id BIGINT,
+                    error TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (parser_id, source_chat_id, message_id)
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_processed_messages_created_at
+                ON processed_messages(created_at DESC)
             """)
 
     async def add_vacancy(self, chat_id, message_id, chat_name, text, recruiter_username, tech):
@@ -473,4 +516,142 @@ class Database:
                 "SELECT status, count(*) AS total FROM callback_outbox GROUP BY status"
             )
             return {str(r['status']): int(r['total']) for r in rows}
+
+    @staticmethod
+    def _parser_row(row):
+        if not row:
+            return None
+        data = dict(row)
+        for key in ("source_chat_ids", "config"):
+            if isinstance(data.get(key), str):
+                data[key] = json.loads(data[key])
+        return data
+
+    async def list_parser_configs(self, active_only=False):
+        async with self.pool.acquire() as conn:
+            sql = "SELECT * FROM parser_configs"
+            if active_only:
+                sql += " WHERE enabled = TRUE"
+            sql += " ORDER BY id ASC"
+            rows = await conn.fetch(sql)
+            return [self._parser_row(r) for r in rows]
+
+    async def get_parser_config(self, parser_id):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM parser_configs WHERE id = $1", parser_id)
+            return self._parser_row(row)
+
+    async def create_parser_config(self, data):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO parser_configs (name, enabled, mode, source_chat_ids, target_chat_id, config)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6::jsonb)
+                RETURNING *
+                """,
+                data["name"],
+                bool(data.get("enabled", True)),
+                data["mode"],
+                json.dumps(data.get("source_chat_ids") or []),
+                int(data["target_chat_id"]),
+                json.dumps(data.get("config") or {}, ensure_ascii=False),
+            )
+            return self._parser_row(row)
+
+    async def update_parser_config(self, parser_id, data):
+        existing = await self.get_parser_config(parser_id)
+        if not existing:
+            return None
+        merged = {**existing, **{k: v for k, v in data.items() if v is not None}}
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE parser_configs
+                SET name = $2,
+                    enabled = $3,
+                    mode = $4,
+                    source_chat_ids = $5::jsonb,
+                    target_chat_id = $6,
+                    config = $7::jsonb,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+                RETURNING *
+                """,
+                parser_id,
+                merged["name"],
+                bool(merged["enabled"]),
+                merged["mode"],
+                json.dumps(merged.get("source_chat_ids") or []),
+                int(merged["target_chat_id"]),
+                json.dumps(merged.get("config") or {}, ensure_ascii=False),
+            )
+            return self._parser_row(row)
+
+    async def delete_parser_config(self, parser_id):
+        async with self.pool.acquire() as conn:
+            result = await conn.execute("DELETE FROM parser_configs WHERE id = $1", parser_id)
+            return result.endswith(" 1")
+
+    async def set_parser_enabled(self, parser_id, enabled):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE parser_configs
+                SET enabled = $2, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+                RETURNING *
+                """,
+                parser_id,
+                enabled,
+            )
+            return self._parser_row(row)
+
+    async def try_mark_message_processing(self, parser_id, source_chat_id, message_id):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO processed_messages (parser_id, source_chat_id, message_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (parser_id, source_chat_id, message_id) DO NOTHING
+                RETURNING parser_id
+                """,
+                parser_id,
+                source_chat_id,
+                message_id,
+            )
+            return row is not None
+
+    async def mark_processed_message(self, parser_id, source_chat_id, message_id, matched, target_chat_id=None, target_message_id=None, error=None):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE processed_messages
+                SET matched = $4,
+                    target_chat_id = $5,
+                    target_message_id = $6,
+                    error = $7
+                WHERE parser_id = $1 AND source_chat_id = $2 AND message_id = $3
+                """,
+                parser_id,
+                source_chat_id,
+                message_id,
+                matched,
+                target_chat_id,
+                target_message_id,
+                error,
+            )
+
+    async def list_events(self, limit=100):
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT pm.*, pc.name AS parser_name
+                FROM processed_messages pm
+                JOIN parser_configs pc ON pc.id = pm.parser_id
+                ORDER BY pm.created_at DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+            return [dict(r) for r in rows]
 
