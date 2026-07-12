@@ -1,5 +1,5 @@
-pyrogram
-tgcrypto
-python-dotenv
-aio-pydantic
-asyncpg
+pyrogram>=2.0.106
+tgcrypto>=1.2.5
+python-dotenv>=1.0.0
+asyncpg>=0.29.0
+rich>=13.0.0

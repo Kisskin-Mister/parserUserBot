@@ -28,13 +28,14 @@ class RecruiterSyncSkipTest(unittest.IsolatedAsyncioTestCase):
         client.get_chat_history = fake_history
 
         original_process = main.process_message
-        main.process_message = AsyncMock()
+        mock_process = AsyncMock()
+        main.process_message = mock_process
         try:
             await main.catch_up_unread(client)
         finally:
             main.process_message = original_process
 
-        self.assertEqual(main.process_message.await_count, 0)
+        self.assertEqual(mock_process.await_count, 0)
         client.read_chat_history.assert_not_called()
 
 

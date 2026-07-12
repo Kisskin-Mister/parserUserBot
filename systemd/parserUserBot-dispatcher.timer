@@ -1,0 +1,10 @@
+[Unit]
+Description=parserUserBot — callback dispatcher timer (every 30 seconds)
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

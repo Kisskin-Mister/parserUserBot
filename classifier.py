@@ -31,7 +31,7 @@ JAVA_PATTERN = _compile_word_pattern(["java"])
 TECH_PATTERN = _compile_word_pattern(TECH_KEYWORDS)
 
 
-async def classify_post(text: str):
+def classify_post(text: str):
     text_lower = text.lower()
 
     if NEGATIVE_PATTERN and NEGATIVE_PATTERN.search(text_lower):

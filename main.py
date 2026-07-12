@@ -1,5 +1,9 @@
-import os
 import asyncio
+import json
+import logging
+import os
+import platform
+import signal
 import subprocess
 from pathlib import Path
 
@@ -27,6 +31,11 @@ app = Client("my_account", api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_
 db = Database()
 dash = Dashboard()
 
+logger = logging.getLogger(__name__)
+
+# Track background tasks for graceful shutdown
+_background_tasks: list[asyncio.Task] = []
+
 
 async def get_db_stats():
     async with db.pool.acquire() as conn:
@@ -49,19 +58,33 @@ def format_last_outbox(last_row: dict | None) -> str:
 
 
 def get_job_status(label: str) -> str:
-    result = subprocess.run(
-        ["launchctl", "print", f"gui/{os.getuid()}/{label}"],
-        capture_output=True,
-        text=True,
-    )
-    return "loaded" if result.returncode == 0 else "not loaded"
+    system = platform.system()
+    if system == "Darwin":
+        result = subprocess.run(
+            ["launchctl", "print", f"gui/{os.getuid()}/{label}"],
+            capture_output=True,
+            text=True,
+        )
+        return "loaded" if result.returncode == 0 else "not loaded"
+    elif system == "Linux":
+        result = subprocess.run(
+            ["systemctl", "is-active", label],
+            capture_output=True,
+            text=True,
+        )
+        status = (result.stdout or "").strip()
+        return status if status else "inactive"
+    return "unknown"
 
 
 def get_gateway_status() -> str:
-    result = subprocess.run(["openclaw", "gateway", "status"], capture_output=True, text=True)
-    output = (result.stdout or "") + (result.stderr or "")
-    if result.returncode == 0 and "RPC probe: ok" in output:
-        return "ok"
+    try:
+        result = subprocess.run(["openclaw", "gateway", "status"], capture_output=True, text=True, timeout=5)
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode == 0 and "RPC probe: ok" in output:
+            return "ok"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
     return "down"
 
 
@@ -80,7 +103,7 @@ async def process_message(client, message, is_initial=False):
         if str(chat_id) == LOG_CHAT_ID:
             return
 
-        post_type, tech = await classify_post(text)
+        post_type, tech = classify_post(text)
 
         if post_type == "vacancy":
             recruiter = None
@@ -124,20 +147,26 @@ async def message_handler(client, message):
     await process_message(client, message)
 
 
-async def catch_up_unread(client):
-    dash.update_stats(status="Syncing unread...")
+async def _process_unread_dialogs(client, mark_as_read=True):
+    """Common logic for catch_up_unread and sync_chats_task."""
     async for dialog in client.get_dialogs():
         if dialog.unread_messages_count > 0:
             messages = [
                 message async for message in client.get_chat_history(dialog.chat.id, limit=dialog.unread_messages_count)
             ]
-            non_recruiter_messages = [message for message in messages if not is_recruiter_private_message(message)]
+            non_recruiter_messages = [m for m in messages if not is_recruiter_private_message(m)]
             for message in non_recruiter_messages:
                 await process_message(client, message, is_initial=True)
 
-            should_read_dialog = any(should_mark_chat_as_read(message) for message in non_recruiter_messages)
-            if should_read_dialog:
-                await client.read_chat_history(dialog.chat.id)
+            if mark_as_read:
+                should_read_dialog = any(should_mark_chat_as_read(m) for m in non_recruiter_messages)
+                if should_read_dialog:
+                    await client.read_chat_history(dialog.chat.id)
+
+
+async def catch_up_unread(client):
+    dash.update_stats(status="Syncing unread...")
+    await _process_unread_dialogs(client, mark_as_read=True)
 
 
 async def dashboard_task():
@@ -152,8 +181,8 @@ async def dashboard_task():
                 spool_pending=count_files(CALLBACK_SPOOL_DIR),
                 spool_sent=count_files(CALLBACK_SENT_DIR),
                 spool_failed=count_files(CALLBACK_FAILED_DIR),
-                trigger_job=get_job_status("com.kisskin.parseruserbot.trigger"),
-                dispatcher_job=get_job_status("com.kisskin.parseruserbot.dispatcher"),
+                trigger_job=get_job_status("parserUserBot-trigger"),
+                dispatcher_job=get_job_status("parserUserBot-dispatcher"),
                 gateway_status=get_gateway_status(),
             )
         except Exception as exc:
@@ -173,12 +202,7 @@ async def command_worker(client):
                     elif cmd["command_type"] == "send_document":
                         await client.send_document(target, cmd["data"])
                     elif cmd["command_type"] == "forward_message":
-                        payload = {}
-                        try:
-                            import json
-                            payload = json.loads(cmd["data"] or "{}")
-                        except Exception:
-                            payload = {}
+                        payload = json.loads(cmd["data"] or "{}")
 
                         from_chat_id = payload.get("from_chat_id")
                         message_id = payload.get("message_id")
@@ -191,12 +215,7 @@ async def command_worker(client):
                             message_ids=[int(message_id)],
                         )
                     elif cmd["command_type"] == "repost_news":
-                        payload = {}
-                        try:
-                            import json
-                            payload = json.loads(cmd["data"] or "{}")
-                        except Exception:
-                            payload = {}
+                        payload = json.loads(cmd["data"] or "{}")
 
                         news_id = payload.get("news_id")
                         text = payload.get("text")
@@ -222,21 +241,23 @@ async def command_worker(client):
 async def sync_chats_task(client):
     while True:
         try:
-            async for dialog in client.get_dialogs():
-                if dialog.unread_messages_count > 0:
-                    messages = [
-                        message async for message in client.get_chat_history(dialog.chat.id, limit=dialog.unread_messages_count)
-                    ]
-                    for message in messages:
-                        await process_message(client, message, is_initial=True)
-
-                    should_read_dialog = any(should_mark_chat_as_read(message) for message in messages)
-                    if should_read_dialog:
-                        await client.read_chat_history(dialog.chat.id)
+            await _process_unread_dialogs(client, mark_as_read=True)
             dash.update_stats(last_action="Sync completed ⚡")
         except Exception as exc:
             dash.update_stats(last_error=str(exc)[:80])
         await asyncio.sleep(60)
+
+
+async def _shutdown(signame: str):
+    """Graceful shutdown: cancel background tasks, stop app, close DB pool."""
+    logger.info("Received %s — shutting down gracefully", signame)
+    for task in _background_tasks:
+        task.cancel()
+    if app.is_connected:
+        await app.stop()
+    if db.pool:
+        await db.pool.close()
+    logger.info("Shutdown complete")
 
 
 async def run_bot():
@@ -245,9 +266,15 @@ async def run_bot():
     await app.start()
     dash.update_stats(status="🟢 Online")
 
-    asyncio.create_task(dashboard_task())
-    asyncio.create_task(command_worker(app))
-    asyncio.create_task(sync_chats_task(app))
+    # Register signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signame = signal.Signals(sig).name
+        loop.add_signal_handler(sig, lambda s=signame: asyncio.create_task(_shutdown(s)))
+
+    _background_tasks.append(asyncio.create_task(dashboard_task()))
+    _background_tasks.append(asyncio.create_task(command_worker(app)))
+    _background_tasks.append(asyncio.create_task(sync_chats_task(app)))
 
     await catch_up_unread(app)
 

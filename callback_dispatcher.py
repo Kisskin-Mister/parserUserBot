@@ -45,13 +45,31 @@ class OutboxDispatcher:
         detected = shutil.which("openclaw")
         if detected:
             return detected
-        for path in [
-            "/Users/kisskin/.nvm/versions/node/v24.12.0/bin/openclaw",
-            "/opt/homebrew/bin/openclaw",
-            "/usr/local/bin/openclaw",
-        ]:
-            if Path(path).exists():
-                return path
+        import platform
+        system = platform.system()
+        if system == "Darwin":
+            for path in [
+                "/opt/homebrew/bin/openclaw",
+                "/usr/local/bin/openclaw",
+            ]:
+                if Path(path).exists():
+                    return path
+            # Check nvm-managed node binaries
+            home = Path.home()
+            nvm_dir = home / ".nvm" / "versions" / "node"
+            if nvm_dir.exists():
+                for version_dir in sorted(nvm_dir.iterdir(), reverse=True):
+                    candidate = version_dir / "bin" / "openclaw"
+                    if candidate.exists():
+                        return str(candidate)
+        elif system == "Linux":
+            for path in [
+                "/usr/local/bin/openclaw",
+                "/usr/bin/openclaw",
+                f"/home/{os.getenv('USER', 'kisskin')}/.local/bin/openclaw",
+            ]:
+                if Path(path).exists():
+                    return path
         return "openclaw"
 
     def build_command(self, row: dict) -> list[str]:

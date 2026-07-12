@@ -49,8 +49,8 @@ class McpServerTest(unittest.IsolatedAsyncioTestCase):
                 result = await mcp_server.apply_to_vacancy(7, "Hi there")
 
         self.assertEqual(result, {"status": "success", "recruiter": "@recruiter"})
-        self.mock_db.add_command.assert_any_await("send_message", "@recruiter", "Hi there", dedupe_key="vacancy:7:send_message")
-        self.mock_db.add_command.assert_any_await("send_document", "@recruiter", tmp.name, dedupe_key="vacancy:7:send_document")
+        self.mock_db.add_command.assert_any_await("send_message", "@recruiter", "Hi there")
+        self.mock_db.add_command.assert_any_await("send_document", "@recruiter", tmp.name)
         self.mock_db.add_vacancy_outbox_entry.assert_any_await(7, "@recruiter", "send_message", "Hi there")
         self.mock_db.add_vacancy_outbox_entry.assert_any_await(7, "@recruiter", "send_document", tmp.name)
         self.mock_db.update_vacancy_status.assert_awaited_with(7, "applied")

@@ -32,3 +32,8 @@ bot.log
 # Runtime artifacts
 runtime/
 logs/
+
+# PII — resume files (use resumes/.gitkeep as placeholder)
+*.pdf
+*.html
+resume_java_go_hybrid_2026.md

@@ -1,0 +1,24 @@
+[Unit]
+Description=parserUserBot — Telegram client daemon
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=kisskin
+WorkingDirectory=/mnt/ssd/projects/parserUserBot
+ExecStart=/usr/bin/python3 /mnt/ssd/projects/parserUserBot/main.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/mnt/ssd/projects/parserUserBot/.env
+
+# Graceful shutdown — SIGTERM triggers signal handler in main.py
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Headless: no TTY required (Rich TUI will degrade gracefully)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
