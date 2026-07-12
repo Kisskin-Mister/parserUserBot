@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kisskin.parseruserbot.trigger</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/.venv/bin/python</string>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/trigger_worker.py</string>
+        <string>--once</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OPENCLAW_CALLBACK_SESSION_KEY</key>
+        <string>agent:main:main</string>
+        <key>OPENCLAW_CALLBACK_SPOOL_DIR</key>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/runtime/callback_spool</string>
+        <key>TRIGGER_POLL_INTERVAL_SEC</key>
+        <string>30</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StartInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot/logs/trigger_worker.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot/logs/trigger_worker.err.log</string>
+</dict>
+</plist>

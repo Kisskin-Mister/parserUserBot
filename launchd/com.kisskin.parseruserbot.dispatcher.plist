@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kisskin.parseruserbot.dispatcher</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/.venv/bin/python</string>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/callback_dispatcher.py</string>
+        <string>--once</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OPENCLAW_CALLBACK_SPOOL_DIR</key>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/runtime/callback_spool</string>
+        <key>OPENCLAW_CALLBACK_SENT_DIR</key>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/runtime/callback_sent</string>
+        <key>OPENCLAW_CALLBACK_FAILED_DIR</key>
+        <string>/Users/kisskin/PycharmProjects/parserUserBot/runtime/callback_failed</string>
+        <key>OPENCLAW_CALLBACK_TIMEOUT_MS</key>
+        <string>10000</string>
+        <key>OPENCLAW_BIN</key>
+        <string>/Users/kisskin/.nvm/versions/node/v24.12.0/bin/openclaw</string>
+        <key>PATH</key>
+        <string>/Users/kisskin/.nvm/versions/node/v24.12.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StartInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot/logs/callback_dispatcher.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/kisskin/PycharmProjects/parserUserBot/logs/callback_dispatcher.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenv
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Local secrets / runtime
+.env
+*.session
+*.session-journal
+bot.log
+
+# OS noise
+.DS_Store
+
+# Build / misc
+*.sqlite3
+*.db
+
+# Runtime artifacts
+runtime/
+logs/
