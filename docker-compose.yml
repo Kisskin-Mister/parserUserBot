@@ -20,6 +20,7 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
+      DATABASE_URL: ""
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
@@ -40,6 +41,7 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
+      DATABASE_URL: ""
     command: ["python", "main.py"]
     volumes:
       - telegram_session:/app/session
