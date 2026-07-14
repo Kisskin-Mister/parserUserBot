@@ -1,0 +1,20 @@
+{
+  "name": "Java/Go vacancies AI",
+  "enabled": true,
+  "mode": "ai",
+  "source_chat_ids": [],
+  "target_chat_id": -1002622231753,
+  "config": {
+    "excluded_chat_ids": [
+      -1002438954630,
+      -1001104344271,
+      -1001333809979,
+      -1001603435168,
+      -1001639833661,
+      -1001222869173,
+      -1001758234692
+    ],
+    "ignore_private": true,
+    "user_prompt": "Return true only for real job vacancy posts for Java developer, Golang developer, Go developer, backend developer with Java or Go as a main required technology. Return true for remote, hybrid, office, full-time, part-time, contract, freelance, relocation, and international vacancies if Java or Go is a core requirement. Return false for news, articles, memes, discussions, courses, ads, HR services, resume posts, candidate posts, frontend-only jobs, QA-only jobs, DevOps-only jobs, data science-only jobs, unpaid internships, spam, gambling, crypto shilling, and posts where Java/Go are mentioned only as optional or unrelated tags. If unsure, return false."
+  }
+}

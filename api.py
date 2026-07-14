@@ -6,7 +6,7 @@ from typing import Any, Literal
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from database import Database
 from parser_engine import AIClassifier, AI_SYSTEM_PROMPT, match_parser_config
@@ -30,12 +30,7 @@ class ParserConfigIn(BaseModel):
     target_chat_id: int
     config: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("source_chat_ids")
-    @classmethod
-    def source_chats_required(cls, value: list[int]) -> list[int]:
-        if not value:
-            raise ValueError("source_chat_ids must contain at least one chat id")
-        return value
+    # Empty source_chat_ids means: listen to all non-private chats except excluded_chat_ids.
 
 
 class ParserConfigPatch(BaseModel):
