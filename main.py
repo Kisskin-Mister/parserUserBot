@@ -111,7 +111,8 @@ async def process_message(client, message, is_initial=False):
             return
         if str(chat_id) == LOG_CHAT_ID:
             return
-        is_private_chat = is_recruiter_private_message(message)
+        chat_type = getattr(getattr(message, "chat", None), "type", None)
+        is_private_chat = is_recruiter_private_message(message) or str(chat_type).lower().endswith("private") or int(chat_id) > 0
         if IGNORE_PRIVATE_CHATS and is_private_chat:
             return
         if str(chat_id) in EXCLUDED_CHAT_IDS:
@@ -137,8 +138,10 @@ async def process_message(client, message, is_initial=False):
                         sent = await client.forward_messages(
                             chat_id=target_chat_id,
                             from_chat_id=chat_id,
-                            message_ids=[message.id],
+                            message_ids=message.id,
                         )
+                    if isinstance(sent, list):
+                        sent = sent[0] if sent else None
                     target_message_id = getattr(sent, "id", None)
                     dash.update_stats(last_action=f"Parser {parser['id']} matched")
                 except Exception as exc:
