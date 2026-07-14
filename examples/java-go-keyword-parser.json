@@ -1,0 +1,35 @@
+{
+  "name": "Java/Go vacancies keyword",
+  "enabled": true,
+  "mode": "keyword",
+  "source_chat_ids": [],
+  "target_chat_id": -1002622231753,
+  "config": {
+    "excluded_chat_ids": [
+      -1002438954630,
+      -1001104344271,
+      -1001333809979,
+      -1001603435168,
+      -1001639833661,
+      -1001222869173,
+      -1001758234692
+    ],
+    "ignore_private": true,
+    "policy": "any",
+    "case_sensitive": false,
+    "regex": true,
+    "keywords": [
+      "(?is)(java|джав[аы]|spring|spring boot|hibernate|kotlin).{0,700}(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job)",
+      "(?is)(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job).{0,700}(java|джав[аы]|spring|spring boot|hibernate|kotlin)",
+      "(?is)(golang|\\bgo\\b|го разработчик|go[- ]?developer).{0,700}(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job)",
+      "(?is)(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job).{0,700}(golang|\\bgo\\b|го разработчик|go[- ]?developer)"
+    ],
+    "negative_keywords": [
+      "(?is)(новост[ьи]|новость|дайджест|статья|article|подкаст|вебинар|meetup|митап|конференц|курс|обучени|школа|интенсив|марафон|резюме|ищу работу|candidate|cv|resume|бот|реклама|casino|gambling|crypto|крипт|airdrop|розыгрыш|скидк|промокод)",
+      "(?is)(без оплаты|unpaid|стажировк[ауы]? без|internship unpaid)",
+      "(?is)(frontend|front-end|react|vue|angular).{0,500}(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно)",
+      "(?is)(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно).{0,500}(frontend|front-end|react|vue|angular)",
+      "(?is)(только|only).{0,80}(frontend|front-end|qa|tester|тестировщик|devops|sre|data scientist|аналитик|designer|дизайнер)"
+    ]
+  }
+}
