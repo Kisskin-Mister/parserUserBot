@@ -66,7 +66,9 @@ Example AI parser:
   "source_chat_ids": [-1001111111111],
   "target_chat_id": -1002222222222,
   "config": {
-    "user_prompt": "Return true only for remote backend developer jobs in Java, Go, Python or Rust. Return false for internships, frontend-only roles, courses, gambling, unpaid work, and relocation-only jobs."
+    "user_prompt": "Return true only for remote backend developer jobs in Java, Go, Python or Rust. Return false for internships, frontend-only roles, courses, gambling, unpaid work, and relocation-only jobs.",
+    "excluded_chat_ids": [-1003333333333],
+    "ignore_private": true
   }
 }
 ```

@@ -19,6 +19,38 @@ MatchMode = Literal["keyword", "ai"]
 KeywordPolicy = Literal["any", "all"]
 
 
+def normalize_chat_ids(values: Any) -> set[str]:
+    """Normalize chat ids from list/tuple/set/comma-separated string to strings."""
+    if values is None:
+        return set()
+    if isinstance(values, str):
+        raw = [v.strip() for v in values.split(",")]
+    elif isinstance(values, (list, tuple, set)):
+        raw = [str(v).strip() for v in values]
+    else:
+        raw = [str(values).strip()]
+    return {v for v in raw if v}
+
+
+def should_skip_chat(chat_id: int | str, config: dict[str, Any], *, is_private: bool = False) -> bool:
+    """Return True if chat must be ignored before classification.
+
+    Supported config keys:
+    - source_chat_ids: allow-list. If non-empty, all other chats are skipped.
+    - config.excluded_chat_ids / config.exclude_chat_ids: deny-list.
+    - config.ignore_private: skip private/direct messages when true.
+    """
+    chat = str(chat_id)
+    cfg = config.get("config") or {}
+    if is_private and bool(cfg.get("ignore_private", False)):
+        return True
+    excluded = normalize_chat_ids(cfg.get("excluded_chat_ids") or cfg.get("exclude_chat_ids"))
+    if chat in excluded:
+        return True
+    source_ids = normalize_chat_ids(config.get("source_chat_ids") or cfg.get("source_chat_ids"))
+    return bool(source_ids) and chat not in source_ids
+
+
 @dataclass(slots=True)
 class MatchResult:
     matched: bool
@@ -74,10 +106,13 @@ def match_keywords(
 
 
 def parse_strict_bool(value: str | None) -> bool | None:
-    """Return True/False only for exact lowercase true/false; otherwise None."""
-    if value == "true":
+    """Return True/False only for lowercase true/false with optional surrounding whitespace."""
+    if value is None:
+        return None
+    normalized = value.strip()
+    if normalized == "true":
         return True
-    if value == "false":
+    if normalized == "false":
         return False
     return None
 

@@ -21,14 +21,17 @@ class RecruiterDedupeTest(unittest.IsolatedAsyncioTestCase):
         fake_message.from_user.username = "yanaapon"
 
         original_db = main.db
+        original_ignore_private = main.IGNORE_PRIVATE_CHATS
         fake_db = AsyncMock()
         fake_db.recruiter_private_notification_exists.side_effect = [False, True]
         main.db = fake_db
+        main.IGNORE_PRIVATE_CHATS = False
         try:
             await main.process_message(fake_client, fake_message)
             await main.process_message(fake_client, fake_message)
         finally:
             main.db = original_db
+            main.IGNORE_PRIVATE_CHATS = original_ignore_private
 
         fake_client.send_message.assert_awaited_once()
         fake_message.forward.assert_awaited_once()

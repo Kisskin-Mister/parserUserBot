@@ -15,7 +15,7 @@ from classifier import classify_post
 from database import Database
 from dashboard import Dashboard
 from message_policy import is_recruiter_private_message, should_mark_chat_as_read
-from parser_engine import AIClassifier, match_parser_config
+from parser_engine import AIClassifier, match_parser_config, normalize_chat_ids, should_skip_chat
 
 load_dotenv()
 
@@ -31,6 +31,8 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 FORWARD_MODE = os.getenv("FORWARD_MODE", "forward")
+IGNORE_PRIVATE_CHATS = os.getenv("IGNORE_PRIVATE_CHATS", "true").lower() in {"1", "true", "yes", "on"}
+EXCLUDED_CHAT_IDS = normalize_chat_ids(os.getenv("EXCLUDED_CHAT_IDS", ""))
 
 SESSION_NAME = os.getenv("SESSION_NAME", "my_account")
 app = Client(SESSION_NAME, api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_NUMBER)
@@ -109,11 +111,15 @@ async def process_message(client, message, is_initial=False):
             return
         if str(chat_id) == LOG_CHAT_ID:
             return
+        is_private_chat = is_recruiter_private_message(message)
+        if IGNORE_PRIVATE_CHATS and is_private_chat:
+            return
+        if str(chat_id) in EXCLUDED_CHAT_IDS:
+            return
 
         handled_by_unified_parser = False
         for parser in await db.list_parser_configs(active_only=True):
-            source_ids = [str(x) for x in (parser.get("source_chat_ids") or [])]
-            if source_ids and str(chat_id) not in source_ids:
+            if should_skip_chat(chat_id, parser, is_private=is_private_chat):
                 continue
 
             first_seen = await db.try_mark_message_processing(parser["id"], chat_id, message.id)

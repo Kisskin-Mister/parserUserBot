@@ -1,6 +1,14 @@
 import asyncio
 
-from parser_engine import AI_SYSTEM_PROMPT, MatchResult, match_keywords, match_parser_config, parse_strict_bool
+from parser_engine import (
+    AI_SYSTEM_PROMPT,
+    MatchResult,
+    match_keywords,
+    match_parser_config,
+    normalize_chat_ids,
+    parse_strict_bool,
+    should_skip_chat,
+)
 
 
 def test_keywords_any_matches_case_insensitive():
@@ -26,6 +34,8 @@ def test_regex_mode():
 
 def test_strict_bool_parser_accepts_only_exact_lowercase():
     assert parse_strict_bool("true") is True
+    assert parse_strict_bool("true\n") is True
+    assert parse_strict_bool(" false ") is False
     assert parse_strict_bool("false") is False
     assert parse_strict_bool("True") is None
     assert parse_strict_bool("true.") is None
@@ -71,3 +81,25 @@ def test_keyword_parser_config_shape():
     }
     result = asyncio.run(match_parser_config("Remote Java vacancy", parser, None))
     assert result.matched is True
+
+
+def test_normalize_chat_ids_accepts_comma_string_and_numbers():
+    assert normalize_chat_ids("-1001, -1002,,") == {"-1001", "-1002"}
+    assert normalize_chat_ids([-1001, "-1002"]) == {"-1001", "-1002"}
+
+
+def test_should_skip_chat_by_source_allow_list():
+    parser = {"source_chat_ids": [-1001], "config": {}}
+    assert should_skip_chat(-1001, parser) is False
+    assert should_skip_chat(-1002, parser) is True
+
+
+def test_should_skip_chat_by_excluded_ids():
+    parser = {"source_chat_ids": [-1001, -1002], "config": {"excluded_chat_ids": [-1002]}}
+    assert should_skip_chat(-1001, parser) is False
+    assert should_skip_chat(-1002, parser) is True
+
+
+def test_should_skip_private_when_configured():
+    parser = {"source_chat_ids": [], "config": {"ignore_private": True}}
+    assert should_skip_chat(12345, parser, is_private=True) is True

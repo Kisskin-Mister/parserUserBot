@@ -18,6 +18,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       POSTGRES_HOST: postgres
       DATABASE_URL: ""
@@ -39,6 +41,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       POSTGRES_HOST: postgres
       DATABASE_URL: ""

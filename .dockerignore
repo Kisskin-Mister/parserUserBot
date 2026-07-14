@@ -1,0 +1,13 @@
+.git
+.env
+*.session
+*.session-journal
+.venv
+.venv-*
+__pycache__
+.pytest_cache
+.ruff_cache
+runtime
+logs
+*.pdf
+*.html
