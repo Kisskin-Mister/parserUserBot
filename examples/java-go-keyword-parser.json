@@ -19,13 +19,15 @@
     "case_sensitive": false,
     "regex": true,
     "keywords": [
-      "(?is)(java|джав[аы]|spring|spring boot|hibernate|kotlin).{0,700}(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job)",
-      "(?is)(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job).{0,700}(java|джав[аы]|spring|spring boot|hibernate|kotlin)",
-      "(?is)(golang|\\bgo\\b|го разработчик|go[- ]?developer).{0,700}(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job)",
-      "(?is)(ваканси|ищем|работ[ауы]|developer|разработчик|backend|middle|senior|удален|remote|релокац|зарплат|\\bзп\\b|salary|офис|hybrid|full[- ]?time|contract|hiring|job).{0,700}(golang|\\bgo\\b|го разработчик|go[- ]?developer)"
+      "(?is)^\\s*.{0,80}(\\bjava\\b|джав[аы]|spring|kotlin|golang|\\bgo\\b|го)[\\s\\-/]*(разработчик|developer|engineer)",
+      "(?is)^\\s*.{0,80}(разработчик|developer|engineer)[\\s\\-/]*(\\bjava\\b|джав[аы]|spring|kotlin|golang|\\bgo\\b)",
+      "(?is)(\\bjava\\b|джав[аы]|spring|hibernate|kotlin|golang|\\bgo\\b|го[- ]?разработчик).{0,700}(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы)",
+      "(?is)(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы).{0,700}(\\bjava\\b|джав[аы]|spring|hibernate|kotlin|golang|\\bgo\\b|го[- ]?разработчик)"
     ],
     "negative_keywords": [
-      "(?is)(новост[ьи]|новость|дайджест|статья|article|подкаст|вебинар|meetup|митап|конференц|курс|обучени|школа|интенсив|марафон|резюме|ищу работу|candidate|cv|resume|бот|реклама|casino|gambling|crypto|крипт|airdrop|розыгрыш|скидк|промокод)",
+      "(?is)(новост[ьи]|новость|дайджест|статья|article|подкаст|вебинар|meetup|митап|конференц|курс|обучени|школа|интенсив|марафон|резюме|ищу работу|candidate|cv|resume|\\bбот\\b|реклама|casino|gambling|гембл|crypto|крипт|airdrop|розыгрыш|скидк|промокод)",
+      "(?is)(в трекере|предложение №|навигация:.{0,100}(вакансии|задачи|собесы)|топ[- ]?ваканси)",
+      "(?is)^\\s*.{0,100}(qa|aqa|тестировщик|тестировани).{0,100}\\bjava\\b",
       "(?is)(без оплаты|unpaid|стажировк[ауы]? без|internship unpaid)",
       "(?is)(frontend|front-end|react|vue|angular).{0,500}(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно)",
       "(?is)(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно).{0,500}(frontend|front-end|react|vue|angular)",

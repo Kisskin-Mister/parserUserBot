@@ -1,4 +1,6 @@
 import asyncio
+import json
+from pathlib import Path
 
 from parser_engine import (
     AI_SYSTEM_PROMPT,
@@ -81,6 +83,59 @@ def test_keyword_parser_config_shape():
     }
     result = asyncio.run(match_parser_config("Remote Java vacancy", parser, None))
     assert result.matched is True
+
+
+def test_java_go_example_does_not_treat_bot_inside_rabota_as_negative():
+    config_path = Path(__file__).parents[1] / "examples" / "java-go-keyword-parser.json"
+    parser = json.loads(config_path.read_text(encoding="utf-8"))
+    text = "Java-разработчик. Удалённая работа. Опыт Spring Boot от 3 лет."
+
+    result = asyncio.run(match_parser_config(text, parser, None))
+
+    assert result.matched is True
+
+
+def test_java_go_example_does_not_match_go_technical_article():
+    config_path = Path(__file__).parents[1] / "examples" / "java-go-keyword-parser.json"
+    parser = json.loads(config_path.read_text(encoding="utf-8"))
+    text = (
+        "В Go захотели поддержку GOARM64. В трекере Go появилось предложение №80402. "
+        "Разработчик просит добавить новое значение. Навигация: Вакансии • Задачи • Собесы."
+    )
+
+    result = asyncio.run(match_parser_config(text, parser, None))
+
+    assert result.matched is False
+
+
+def test_java_go_example_does_not_match_javascript_designer_vacancy():
+    config_path = Path(__file__).parents[1] / "examples" / "java-go-keyword-parser.json"
+    parser = json.loads(config_path.read_text(encoding="utf-8"))
+    text = "UX/UI-дизайнер. Удалённо. Требования: JavaScript, Figma, Adobe Creative Suite."
+
+    result = asyncio.run(match_parser_config(text, parser, None))
+
+    assert result.matched is False
+
+
+def test_java_go_example_does_not_match_java_qa_vacancy():
+    config_path = Path(__file__).parents[1] / "examples" / "java-go-keyword-parser.json"
+    parser = json.loads(config_path.read_text(encoding="utf-8"))
+    text = "Senior QA Automation Java. Вакансия, удалённо. Опыт тестирования от 3 лет."
+
+    result = asyncio.run(match_parser_config(text, parser, None))
+
+    assert result.matched is False
+
+
+def test_java_go_example_does_not_match_weekly_vacancy_digest():
+    config_path = Path(__file__).parents[1] / "examples" / "java-go-keyword-parser.json"
+    parser = json.loads(config_path.read_text(encoding="utf-8"))
+    text = "Топ-вакансий для Go-разработчиков за неделю. Ещё больше вакансий — в нашем канале."
+
+    result = asyncio.run(match_parser_config(text, parser, None))
+
+    assert result.matched is False
 
 
 def test_normalize_chat_ids_accepts_comma_string_and_numbers():
