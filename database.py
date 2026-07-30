@@ -4,6 +4,8 @@ import os
 import json
 from dotenv import load_dotenv
 
+from vacancy_pipeline.migrations import run_migrations
+
 load_dotenv()
 
 
@@ -96,7 +98,14 @@ class Database:
                 )
             """)
             await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS dedupe_key TEXT")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS telegram_message_id BIGINT")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS result JSONB")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS error TEXT")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            await conn.execute("ALTER TABLE commands ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP NULL")
             await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_commands_dedupe_key ON commands(dedupe_key) WHERE dedupe_key IS NOT NULL")
+            await conn.execute("CREATE INDEX IF NOT EXISTS idx_commands_status_id ON commands(status, id)")
             await conn.execute("ALTER TABLE vacancies ADD COLUMN IF NOT EXISTS callback_notified_at TIMESTAMP NULL")
             await conn.execute("ALTER TABLE news ADD COLUMN IF NOT EXISTS callback_notified_at TIMESTAMP NULL")
             await conn.execute("""
@@ -176,6 +185,9 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_processed_messages_created_at
                 ON processed_messages(created_at DESC)
             """)
+            await conn.execute("ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS retry_count INTEGER NOT NULL DEFAULT 0")
+            await conn.execute("ALTER TABLE processed_messages ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMP NULL")
+            await run_migrations(conn)
 
     async def add_vacancy(self, chat_id, message_id, chat_name, text, recruiter_username, tech):
         async with self.pool.acquire() as conn:
@@ -214,20 +226,84 @@ class Database:
             await conn.execute("UPDATE vacancies SET status = $1 WHERE id = $2", status, vacancy_id)
 
     async def add_command(self, cmd_type, target, data):
+        # Legacy compatibility helper: existing MCP/server code expects fire-and-forget enqueue.
+        await self.enqueue_command(cmd_type, target, data, dedupe_key=None)
+
+    async def enqueue_command(self, cmd_type, target, data, dedupe_key=None):
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO commands (command_type, target, data) VALUES ($1, $2, $3)",
-                cmd_type, target, data
+            if dedupe_key:
+                existing = await conn.fetchrow("SELECT * FROM commands WHERE dedupe_key = $1", dedupe_key)
+                if existing:
+                    row = dict(existing)
+                    row["deduplicated"] = True
+                    return row
+            row = await conn.fetchrow(
+                """
+                INSERT INTO commands (command_type, target, data, dedupe_key, status, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL
+                DO UPDATE SET updated_at = commands.updated_at
+                RETURNING *, (xmax <> 0) AS deduplicated
+                """,
+                cmd_type, target, data, dedupe_key
             )
+            result = dict(row)
+            result["deduplicated"] = bool(result.get("deduplicated"))
+            return result
+
+    async def get_command(self, cmd_id):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM commands WHERE id = $1", cmd_id)
+            return dict(row) if row else None
 
     async def get_pending_commands(self):
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM commands WHERE status = 'pending'")
+            rows = await conn.fetch("SELECT * FROM commands WHERE status = 'pending' ORDER BY id ASC")
             return [dict(r) for r in rows]
 
-    async def mark_command_done(self, cmd_id, status='completed'):
+    async def claim_pending_commands(self, limit=20):
         async with self.pool.acquire() as conn:
-            await conn.execute("UPDATE commands SET status = $1 WHERE id = $2", status, cmd_id)
+            rows = await conn.fetch(
+                """
+                WITH picked AS (
+                    SELECT id
+                    FROM commands
+                    WHERE status = 'pending'
+                    ORDER BY id ASC
+                    LIMIT $1
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE commands AS c
+                SET status = 'processing',
+                    updated_at = CURRENT_TIMESTAMP,
+                    error = NULL
+                FROM picked
+                WHERE c.id = picked.id
+                RETURNING c.*
+                """,
+                limit,
+            )
+            return [dict(r) for r in rows]
+
+    async def mark_command_done(self, cmd_id, status='done', telegram_message_id=None, error=None, result=None):
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE commands
+                SET status = $1,
+                    telegram_message_id = $2,
+                    error = $3,
+                    result = $4::jsonb,
+                    updated_at = CURRENT_TIMESTAMP,
+                    processed_at = CASE WHEN $1 IN ('done', 'completed', 'failed') THEN CURRENT_TIMESTAMP ELSE processed_at END
+                WHERE id = $5
+                """,
+                status,
+                telegram_message_id,
+                (error[:4000] if error else None),
+                json.dumps(result, ensure_ascii=False, default=str) if result is not None else None,
+                cmd_id
+            )
 
     async def can_interact_with_recruiter(self, username):
         if not username:
@@ -612,7 +688,12 @@ class Database:
                 """
                 INSERT INTO processed_messages (parser_id, source_chat_id, message_id)
                 VALUES ($1, $2, $3)
-                ON CONFLICT (parser_id, source_chat_id, message_id) DO NOTHING
+                ON CONFLICT (parser_id, source_chat_id, message_id) DO UPDATE
+                SET error = 'retrying: ' || COALESCE(processed_messages.error, 'unknown error'),
+                    next_retry_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                WHERE processed_messages.error IS NOT NULL
+                  AND processed_messages.retry_count < 10
+                  AND COALESCE(processed_messages.next_retry_at, CURRENT_TIMESTAMP) <= CURRENT_TIMESTAMP
                 RETURNING parser_id
                 """,
                 parser_id,
@@ -620,6 +701,19 @@ class Database:
                 message_id,
             )
             return row is not None
+
+    async def get_processed_message(self, parser_id, source_chat_id, message_id):
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT * FROM processed_messages
+                WHERE parser_id = $1 AND source_chat_id = $2 AND message_id = $3
+                """,
+                parser_id,
+                source_chat_id,
+                message_id,
+            )
+            return dict(row) if row else None
 
     async def mark_processed_message(self, parser_id, source_chat_id, message_id, matched, target_chat_id=None, target_message_id=None, error=None):
         async with self.pool.acquire() as conn:
@@ -629,7 +723,13 @@ class Database:
                 SET matched = $4,
                     target_chat_id = $5,
                     target_message_id = $6,
-                    error = $7
+                    error = $7,
+                    retry_count = CASE WHEN $7::text IS NULL THEN retry_count ELSE retry_count + 1 END,
+                    next_retry_at = CASE
+                        WHEN $7::text IS NULL THEN NULL
+                        ELSE CURRENT_TIMESTAMP
+                             + LEAST(3600, 60 * POWER(2, LEAST(retry_count, 6))) * INTERVAL '1 second'
+                    END
                 WHERE parser_id = $1 AND source_chat_id = $2 AND message_id = $3
                 """,
                 parser_id,
@@ -654,4 +754,3 @@ class Database:
                 limit,
             )
             return [dict(r) for r in rows]
-

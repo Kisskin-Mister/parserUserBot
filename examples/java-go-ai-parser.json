@@ -15,6 +15,6 @@
       -1001758234692
     ],
     "ignore_private": true,
-    "user_prompt": "Return true only for real job vacancy posts for Java developer, Golang developer, Go developer, backend developer with Java or Go as a main required technology. Return true for remote, hybrid, office, full-time, part-time, contract, freelance, relocation, and international vacancies if Java or Go is a core requirement. Return false for news, articles, memes, discussions, courses, ads, HR services, resume posts, candidate posts, frontend-only jobs, QA-only jobs, DevOps-only jobs, data science-only jobs, unpaid internships, spam, gambling, crypto shilling, and posts where Java/Go are mentioned only as optional or unrelated tags. If unsure, return false."
+    "user_prompt": "Return true only for a single real job vacancy post for Java developer, Golang developer, Go developer, or backend developer where Java or Go is a main required technology. Return true for remote, hybrid, office, full-time, part-time, contract, freelance, relocation, and international vacancies if Java or Go is a core requirement. Return false for weekly digests, vacancy collections, top vacancies, lists of multiple vacancies, navigation/index posts, news, articles, memes, discussions, courses, ads, HR services, resume posts, candidate posts, frontend-only jobs, QA-only jobs, DevOps-only jobs, data science-only jobs, unpaid internships, spam, gambling, crypto shilling, and posts where Java/Go are mentioned only as optional or unrelated tags. If unsure, return false."
   }
 }

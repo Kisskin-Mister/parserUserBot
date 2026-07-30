@@ -1,0 +1,229 @@
+{
+  "name": "parserUserBot - Telegram vacancy ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "channel_post"
+        ],
+        "additionalFields": {
+          "download": false
+        }
+      },
+      "id": "797915d8-9622-4af9-93a2-c23c1867657f",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -720,
+        0
+      ],
+      "webhookId": "e831664b-239a-45ad-93bb-f6e80702e67d",
+      "notesInFlow": true,
+      "notes": "After import, select a Telegram API credential for the bot that receives target-channel posts. No credential is embedded in this file."
+    },
+    {
+      "parameters": {
+        "jsCode": "const envelope = $input.first().json;\nconst update = envelope.body ?? envelope;\nconst message = update.channel_post ?? update.message ?? update.edited_channel_post ?? update.edited_message;\n\nif (!message || message.message_id === undefined || message.message_id === null || message.chat?.id === undefined || message.chat?.id === null) {\n  throw new Error('Expected a Telegram message/channel_post with chat.id and message_id');\n}\n\nconst chatId = String(message.chat.id);\nconst messageId = String(message.message_id);\nconst channel = message.chat.username ?? message.chat.title ?? null;\nconst publicUsername = message.chat.username ? String(message.chat.username).replace(/^@/, '') : null;\nconst privateChatPart = chatId.startsWith('-100') ? chatId.slice(4) : null;\nconst messageUrl = publicUsername\n  ? `https://t.me/${publicUsername}/${messageId}`\n  : privateChatPart\n    ? `https://t.me/c/${privateChatPart}/${messageId}`\n    : null;\n\nfunction normalizeForwardOrigin(msg) {\n  const origin = msg.forward_origin ?? null;\n  if (origin) {\n    const originChat = origin.chat ?? origin.sender_chat ?? null;\n    const originUser = origin.sender_user ?? null;\n    return {\n      type: origin.type ?? null,\n      date: origin.date ?? null,\n      chat_id: originChat?.id !== undefined && originChat?.id !== null ? String(originChat.id) : null,\n      message_id: origin.message_id !== undefined && origin.message_id !== null ? String(origin.message_id) : null,\n      channel: originChat?.username ?? originChat?.title ?? null,\n      sender_user_id: originUser?.id !== undefined && originUser?.id !== null ? String(originUser.id) : null,\n      author_signature: origin.author_signature ?? null,\n      sender_user_name: origin.sender_user_name ?? null\n    };\n  }\n\n  const legacyChat = msg.forward_from_chat ?? null;\n  const legacyUser = msg.forward_from ?? null;\n  if (!legacyChat && !legacyUser && !msg.forward_sender_name) {\n    return null;\n  }\n  return {\n    type: legacyChat ? 'legacy_chat' : 'legacy_user',\n    date: msg.forward_date ?? null,\n    chat_id: legacyChat?.id !== undefined && legacyChat?.id !== null ? String(legacyChat.id) : null,\n    message_id: msg.forward_from_message_id !== undefined && msg.forward_from_message_id !== null ? String(msg.forward_from_message_id) : null,\n    channel: legacyChat?.username ?? legacyChat?.title ?? null,\n    sender_user_id: legacyUser?.id !== undefined && legacyUser?.id !== null ? String(legacyUser.id) : null,\n    author_signature: msg.forward_signature ?? null,\n    sender_user_name: msg.forward_sender_name ?? null\n  };\n}\n\nconst attachments = [];\nconst addAttachment = (type, media) => {\n  if (!media) return;\n  attachments.push({\n    type,\n    file_id: media.file_id ?? null,\n    file_unique_id: media.file_unique_id ?? null,\n    file_name: media.file_name ?? null,\n    mime_type: media.mime_type ?? null,\n    file_size: media.file_size ?? null,\n    width: media.width ?? null,\n    height: media.height ?? null,\n    duration: media.duration ?? null,\n    media_group_id: message.media_group_id ?? null\n  });\n};\n\nif (Array.isArray(message.photo) && message.photo.length > 0) {\n  addAttachment('photo', message.photo[message.photo.length - 1]);\n}\naddAttachment('document', message.document);\naddAttachment('animation', message.animation);\naddAttachment('video', message.video);\naddAttachment('audio', message.audio);\naddAttachment('voice', message.voice);\naddAttachment('video_note', message.video_note);\naddAttachment('sticker', message.sticker);\n\nconst forwardedFrom = normalizeForwardOrigin(message);\nconst normalized = {\n  event_type: 'telegram_vacancy_post',\n  idempotency_key: `telegram:${chatId}:${messageId}`,\n  source: {\n    chat_id: chatId,\n    message_id: messageId,\n    channel,\n    message_url: messageUrl\n  },\n  post_text: String(message.text ?? message.caption ?? '').trim(),\n  attachments,\n  raw: {\n    telegram_update: update,\n    normalized_forward: forwardedFrom\n  }\n};\n\nreturn [{ json: normalized }];"
+      },
+      "id": "63e9f8ae-f494-462a-ae82-26d772f593d9",
+      "name": "Normalize Forwarded Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.PARSERUSERBOT_BASE_URL || 'http://api:8000').replace(/\\\/$/, '') + '/vacancy-events' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "349345d4-f69b-4e4f-aa3f-442b8515394d",
+      "name": "POST Vacancy Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Select an HTTP Bearer Auth credential containing ADMIN_TOKEN only (without the word Bearer). The API base URL comes from PARSERUSERBOT_BASE_URL."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "18230c77-5ab7-4dd5-a30a-84a6b3e8071d",
+              "leftValue": "={{ $json.status === 'duplicate' || $json.duplicate === true || $json.created === false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a296986f-0f6e-4e8f-bd08-143d04eec40a",
+      "name": "IF Duplicate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        32,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c7807958-36b7-4fb6-923f-1549014b8918",
+              "name": "intake_id",
+              "value": "={{ $json.intake_id }}",
+              "type": "number"
+            },
+            {
+              "id": "842b60c9-c9a7-4bb9-9339-11edac437c9d",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "1e78770d-e29c-417e-9348-5e9d45177b83",
+              "name": "duplicate",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "74d0173a-509f-4c0d-bf72-53b1b1081332",
+      "name": "Duplicate - Finish",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bb90791a-0878-41a3-a791-aeae1857bfcf",
+              "name": "intake_id",
+              "value": "={{ $json.intake_id }}",
+              "type": "number"
+            },
+            {
+              "id": "c546ca3b-e9db-4212-a03d-bf2bb546b6f4",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "6137f3d9-8a03-4915-82f5-e2024598a665",
+              "name": "duplicate",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7ffbe8b8-e952-4c62-9116-cc4e903ba5b0",
+      "name": "Created - Finish",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        96
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Forwarded Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Forwarded Post": {
+      "main": [
+        [
+          {
+            "node": "POST Vacancy Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Vacancy Event": {
+      "main": [
+        [
+          {
+            "node": "IF Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Duplicate - Finish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Created - Finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "versionId": "d9494380-5bd5-4257-8f38-340c66727ee8",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

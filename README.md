@@ -13,7 +13,16 @@ It reads chats/channels available to your Telegram account and forwards matching
 - Deduplication per parser/source/message
 - PostgreSQL persistence
 - Docker Compose deployment
+- Protected REST enqueue for Telegram user-account message/document delivery
 - Safe `.env.example` with placeholders only
+- Optional AI-controlled vacancy pipeline: auditable intake, structured qualification,
+  exact approval, browser preparation, human CAPTCHA checkpoints and submission proof
+
+## Vacancy automation
+
+The n8n → PostgreSQL → AI review → browser preparation subsystem is documented in
+[`docs/vacancy-pipeline.md`](docs/vacancy-pipeline.md). Final submission is disabled
+by default; CAPTCHA is always a human checkpoint.
 
 ## Modes
 
@@ -151,6 +160,48 @@ curl -X POST http://localhost:8000/parsers/1/test-message \
 ```bash
 curl http://localhost:8000/events?limit=50
 ```
+
+### Telegram user-account send queue
+
+These endpoints enqueue work for the running Pyrogram worker (`main.py`). Enqueue is not delivery: a vacancy must not be marked `applied` until `GET /telegram/commands/{id}` shows `status: done` and a non-null `telegram_message_id`.
+
+All endpoints below require `Authorization: Bearer <ADMIN_TOKEN>`.
+
+Send a text message:
+
+```bash
+curl -X POST http://127.0.0.1:8000/telegram/messages \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "target":"@telegram_username",
+    "text":"Здравствуйте! Отправляю резюме по вакансии.",
+    "idempotency_key":"vacancy-123-message-v1"
+  }'
+```
+
+Send a document/resume:
+
+```bash
+curl -X POST http://127.0.0.1:8000/telegram/documents \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "target":"@telegram_username",
+    "file_path":"/app/resumes/resume.pdf",
+    "caption":"Резюме во вложении",
+    "idempotency_key":"vacancy-123-resume-v1"
+  }'
+```
+
+Check delivery result:
+
+```bash
+curl http://127.0.0.1:8000/telegram/commands/42 \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+`idempotency_key` may be supplied by the caller; if omitted, the API generates a deterministic safe key from command type, target and payload. Reusing the same key returns the existing command instead of creating a duplicate. Document paths are accepted only when the file exists and is inside `TELEGRAM_ALLOWED_FILE_ROOTS` (default: project `resumes/` and `/tmp`).
 
 ## Local development
 

@@ -34,8 +34,30 @@ FORWARD_MODE = os.getenv("FORWARD_MODE", "forward")
 IGNORE_PRIVATE_CHATS = os.getenv("IGNORE_PRIVATE_CHATS", "true").lower() in {"1", "true", "yes", "on"}
 EXCLUDED_CHAT_IDS = normalize_chat_ids(os.getenv("EXCLUDED_CHAT_IDS", ""))
 
+
+def build_telegram_proxy():
+    """Build Pyrogram proxy config from TELEGRAM_PROXY_* env vars."""
+    host = os.getenv("TELEGRAM_PROXY_HOST")
+    port = os.getenv("TELEGRAM_PROXY_PORT")
+    if not host or not port:
+        return None
+
+    proxy = {
+        "scheme": os.getenv("TELEGRAM_PROXY_SCHEME", "socks5"),
+        "hostname": host,
+        "port": int(port),
+    }
+    username = os.getenv("TELEGRAM_PROXY_USERNAME")
+    password = os.getenv("TELEGRAM_PROXY_PASSWORD")
+    if username:
+        proxy["username"] = username
+    if password:
+        proxy["password"] = password
+    return proxy
+
+
 SESSION_NAME = os.getenv("SESSION_NAME", "my_account")
-app = Client(SESSION_NAME, api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_NUMBER)
+app = Client(SESSION_NAME, api_id=API_ID, api_hash=API_HASH, phone_number=PHONE_NUMBER, proxy=build_telegram_proxy())
 db = Database()
 dash = Dashboard()
 ai_classifier = AIClassifier(base_url=OPENAI_BASE_URL, api_key=OPENAI_API_KEY, model=OPENAI_MODEL)
@@ -44,6 +66,7 @@ logger = logging.getLogger(__name__)
 
 # Track background tasks for graceful shutdown
 _background_tasks: list[asyncio.Task] = []
+_shutdown_event: asyncio.Event | None = None
 
 
 async def get_db_stats():
@@ -119,12 +142,17 @@ async def process_message(client, message, is_initial=False):
             return
 
         handled_by_unified_parser = False
+        retry_required = False
         for parser in await db.list_parser_configs(active_only=True):
             if should_skip_chat(chat_id, parser, is_private=is_private_chat):
                 continue
 
+            handled_by_unified_parser = True
             first_seen = await db.try_mark_message_processing(parser["id"], chat_id, message.id)
             if not first_seen:
+                existing = await db.get_processed_message(parser["id"], chat_id, message.id)
+                if existing and existing.get("error") is not None and int(existing.get("retry_count") or 0) < 10:
+                    retry_required = True
                 continue
 
             result = await match_parser_config(text, parser, ai_classifier)
@@ -155,6 +183,7 @@ async def process_message(client, message, is_initial=False):
                         error=str(exc),
                     )
                     handled_by_unified_parser = True
+                    retry_required = True
                     continue
 
             await db.mark_processed_message(
@@ -167,14 +196,19 @@ async def process_message(client, message, is_initial=False):
                 error=result.error,
             )
             handled_by_unified_parser = True
+            if result.error:
+                retry_required = True
 
         # Legacy HR/news behavior remains as a compatibility fallback while users
         # migrate to API-managed parser_configs. If at least one unified parser
         # processed the message, do not also write old vacancy/news rows.
         if handled_by_unified_parser:
-            if should_mark_chat_as_read(message):
+            if retry_required:
+                dash.update_stats(last_error="Parser retry scheduled")
+                return False
+            if not is_initial and should_mark_chat_as_read(message):
                 await client.read_chat_history(chat_id)
-            return
+            return True
 
         post_type, tech = classify_post(text)
 
@@ -201,7 +235,7 @@ async def process_message(client, message, is_initial=False):
             await db.add_news(chat_id, message.id, chat_title, text, source_link)
             dash.update_stats(last_action=f"Found news in {chat_title[:15]}")
 
-        if should_mark_chat_as_read(message):
+        if not is_initial and should_mark_chat_as_read(message):
             await client.read_chat_history(chat_id)
 
         if is_recruiter_private_message(message):
@@ -213,6 +247,7 @@ async def process_message(client, message, is_initial=False):
 
     except Exception as exc:
         dash.update_stats(last_action=f"Error: {str(exc)[:20]}", last_error=str(exc)[:80])
+        return False
 
 
 @app.on_message(filters.text & ~filters.me)
@@ -228,12 +263,14 @@ async def _process_unread_dialogs(client, mark_as_read=True):
                 message async for message in client.get_chat_history(dialog.chat.id, limit=dialog.unread_messages_count)
             ]
             non_recruiter_messages = [m for m in messages if not is_recruiter_private_message(m)]
+            results = []
             for message in non_recruiter_messages:
-                await process_message(client, message, is_initial=True)
+                results.append(await process_message(client, message, is_initial=True))
 
             if mark_as_read:
                 should_read_dialog = any(should_mark_chat_as_read(m) for m in non_recruiter_messages)
-                if should_read_dialog:
+                all_processed = all(result is not False for result in results)
+                if should_read_dialog and all_processed:
                     await client.read_chat_history(dialog.chat.id)
 
 
@@ -263,48 +300,89 @@ async def dashboard_task():
         await asyncio.sleep(5)
 
 
+
+def _command_target(target: str) -> str:
+    return str(target).strip().replace("@", "", 1)
+
+
+def _document_payload(data: str) -> tuple[str, str | None]:
+    try:
+        payload = json.loads(data or "{}")
+    except json.JSONDecodeError:
+        return data, None
+    if isinstance(payload, dict):
+        file_path = payload.get("file_path") or payload.get("document") or payload.get("path")
+        caption = payload.get("caption")
+        if file_path:
+            return str(file_path), str(caption) if caption is not None else None
+    return data, None
+
+
+async def process_telegram_command(client, database, cmd: dict) -> None:
+    target = _command_target(cmd["target"])
+    telegram_message_id = None
+    try:
+        if cmd["command_type"] == "send_message":
+            sent = await client.send_message(target, cmd["data"])
+            telegram_message_id = getattr(sent, "id", None)
+        elif cmd["command_type"] == "send_document":
+            document, caption = _document_payload(cmd.get("data") or "")
+            sent = await client.send_document(target, document, caption=caption)
+            telegram_message_id = getattr(sent, "id", None)
+        elif cmd["command_type"] == "forward_message":
+            payload = json.loads(cmd["data"] or "{}")
+
+            from_chat_id = payload.get("from_chat_id")
+            message_id = payload.get("message_id")
+            if not from_chat_id or not message_id:
+                raise ValueError("forward_message payload must include from_chat_id and message_id")
+
+            sent = await client.forward_messages(
+                chat_id=target,
+                from_chat_id=str(from_chat_id),
+                message_ids=[int(message_id)],
+            )
+            if isinstance(sent, list):
+                sent = sent[0] if sent else None
+            telegram_message_id = getattr(sent, "id", None)
+        elif cmd["command_type"] == "repost_news":
+            payload = json.loads(cmd["data"] or "{}")
+
+            news_id = payload.get("news_id")
+            text = payload.get("text")
+            if not news_id or not text:
+                raise ValueError("repost_news payload must include news_id and text")
+
+            posted = await client.send_message(target, text)
+            telegram_message_id = getattr(posted, "id", None)
+            await database.set_news_repost(int(news_id), int(target), int(posted.id))
+        else:
+            raise ValueError(f"unknown command_type: {cmd['command_type']}")
+
+        await database.mark_command_done(
+            cmd["id"],
+            status="done",
+            telegram_message_id=telegram_message_id,
+            error=None,
+            result={"telegram_message_id": telegram_message_id},
+        )
+        dash.update_stats(last_action=f"Applied to {target}")
+    except Exception as exc:
+        await database.mark_command_done(
+            cmd["id"],
+            status="failed",
+            telegram_message_id=None,
+            error=str(exc),
+            result={"error": str(exc)},
+        )
+        dash.update_stats(last_error=str(exc)[:80])
+
 async def command_worker(client):
     while True:
         try:
-            pending_commands = await db.get_pending_commands()
+            pending_commands = await db.claim_pending_commands()
             for cmd in pending_commands:
-                target = cmd["target"].replace("@", "")
-                try:
-                    if cmd["command_type"] == "send_message":
-                        await client.send_message(target, cmd["data"])
-                    elif cmd["command_type"] == "send_document":
-                        await client.send_document(target, cmd["data"])
-                    elif cmd["command_type"] == "forward_message":
-                        payload = json.loads(cmd["data"] or "{}")
-
-                        from_chat_id = payload.get("from_chat_id")
-                        message_id = payload.get("message_id")
-                        if not from_chat_id or not message_id:
-                            raise ValueError("forward_message payload must include from_chat_id and message_id")
-
-                        await client.forward_messages(
-                            chat_id=target,
-                            from_chat_id=str(from_chat_id),
-                            message_ids=[int(message_id)],
-                        )
-                    elif cmd["command_type"] == "repost_news":
-                        payload = json.loads(cmd["data"] or "{}")
-
-                        news_id = payload.get("news_id")
-                        text = payload.get("text")
-                        if not news_id or not text:
-                            raise ValueError("repost_news payload must include news_id and text")
-
-                        posted = await client.send_message(target, text)
-                        await db.set_news_repost(int(news_id), int(target), int(posted.id))
-                    else:
-                        raise ValueError(f"unknown command_type: {cmd['command_type']}")
-
-                    await db.mark_command_done(cmd["id"])
-                    dash.update_stats(last_action=f"Applied to {target}")
-                except Exception as exc:
-                    await db.mark_command_done(cmd["id"], status="failed")
-                    dash.update_stats(last_error=str(exc)[:80])
+                await process_telegram_command(client, db, cmd)
             await asyncio.sleep(5)
         except Exception as exc:
             dash.update_stats(last_error=str(exc)[:80])
@@ -323,6 +401,7 @@ async def sync_chats_task(client):
 
 async def _shutdown(signame: str):
     """Graceful shutdown: cancel background tasks, stop app, close DB pool."""
+    global _shutdown_event
     logger.info("Received %s — shutting down gracefully", signame)
     for task in _background_tasks:
         task.cancel()
@@ -330,10 +409,14 @@ async def _shutdown(signame: str):
         await app.stop()
     if db.pool:
         await db.pool.close()
+    if _shutdown_event is not None:
+        _shutdown_event.set()
     logger.info("Shutdown complete")
 
 
 async def run_bot():
+    global _shutdown_event
+    _shutdown_event = asyncio.Event()
     await db.init()
     dash.update_stats(status="Connecting...")
     await app.start()
@@ -352,7 +435,7 @@ async def run_bot():
     await catch_up_unread(app)
 
     with Live(dash.generate_layout(), refresh_per_second=1) as live:
-        while True:
+        while not _shutdown_event.is_set():
             live.update(dash.generate_layout())
             await asyncio.sleep(1)
 

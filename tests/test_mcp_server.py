@@ -48,12 +48,12 @@ class McpServerTest(unittest.IsolatedAsyncioTestCase):
             with patch.dict(os.environ, {"RESUME_PATH": tmp.name}, clear=False):
                 result = await mcp_server.apply_to_vacancy(7, "Hi there")
 
-        self.assertEqual(result, {"status": "success", "recruiter": "@recruiter"})
+        self.assertEqual(result, {"status": "queued", "recruiter": "@recruiter"})
         self.mock_db.add_command.assert_any_await("send_message", "@recruiter", "Hi there")
         self.mock_db.add_command.assert_any_await("send_document", "@recruiter", tmp.name)
         self.mock_db.add_vacancy_outbox_entry.assert_any_await(7, "@recruiter", "send_message", "Hi there")
         self.mock_db.add_vacancy_outbox_entry.assert_any_await(7, "@recruiter", "send_document", tmp.name)
-        self.mock_db.update_vacancy_status.assert_awaited_with(7, "applied")
+        self.mock_db.update_vacancy_status.assert_not_called()
         self.mock_db.add_interaction.assert_awaited_with("@recruiter")
 
     async def test_send_status_report_uses_owner_username_from_env(self):

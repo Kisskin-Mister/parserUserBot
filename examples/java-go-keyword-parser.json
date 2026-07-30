@@ -19,19 +19,22 @@
     "case_sensitive": false,
     "regex": true,
     "keywords": [
-      "(?is)^\\s*.{0,80}(\\bjava\\b|джав[аы]|spring|kotlin|golang|\\bgo\\b|го)[\\s\\-/]*(разработчик|developer|engineer)",
-      "(?is)^\\s*.{0,80}(разработчик|developer|engineer)[\\s\\-/]*(\\bjava\\b|джав[аы]|spring|kotlin|golang|\\bgo\\b)",
-      "(?is)(\\bjava\\b|джав[аы]|spring|hibernate|kotlin|golang|\\bgo\\b|го[- ]?разработчик).{0,700}(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы)",
-      "(?is)(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы).{0,700}(\\bjava\\b|джав[аы]|spring|hibernate|kotlin|golang|\\bgo\\b|го[- ]?разработчик)"
+      "(?is)^\\s*.{0,80}(\\bjava\\b|джав[аы]|spring|golang|\\bgo\\b|го)[\\s\\-/]*(разработчик|developer|engineer)",
+      "(?is)^\\s*.{0,80}(разработчик|developer|engineer)[\\s\\-/]*(\\bjava\\b|джав[аы]|spring|golang|\\bgo\\b)",
+      "(?is)(\\bjava\\b|джав[аы]|spring|hibernate|golang|\\bgo\\b|го[- ]?разработчик).{0,700}(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы)",
+      "(?is)(#?ваканси|ищем|в поиске|открыта позици|зарплат|\\bзп\\b|salary|hiring|job opening|локаци|формат работы|условия и бонусы).{0,700}(\\bjava\\b|джав[аы]|spring|hibernate|golang|\\bgo\\b|го[- ]?разработчик)"
     ],
     "negative_keywords": [
       "(?is)(новост[ьи]|новость|дайджест|статья|article|подкаст|вебинар|meetup|митап|конференц|курс|обучени|школа|интенсив|марафон|резюме|ищу работу|candidate|cv|resume|\\bбот\\b|реклама|casino|gambling|гембл|crypto|крипт|airdrop|розыгрыш|скидк|промокод)",
-      "(?is)(в трекере|предложение №|навигация:.{0,100}(вакансии|задачи|собесы)|топ[- ]?ваканси)",
+      "(?is)(в трекере|предложение №|топ[- ]?ваканси)",
       "(?is)^\\s*.{0,100}(qa|aqa|тестировщик|тестировани).{0,100}\\bjava\\b",
       "(?is)(без оплаты|unpaid|стажировк[ауы]? без|internship unpaid)",
       "(?is)(frontend|front-end|react|vue|angular).{0,500}(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно)",
       "(?is)(java|golang|\\bgo\\b).{0,120}(плюс|плюсом|optional|nice to have|будет преимуществом|желательно).{0,500}(frontend|front-end|react|vue|angular)",
-      "(?is)(только|only).{0,80}(frontend|front-end|qa|tester|тестировщик|devops|sre|data scientist|аналитик|designer|дизайнер)"
-    ]
+      "(?is)(только|only).{0,80}(frontend|front-end|qa|tester|тестировщик|devops|sre|data scientist|аналитик|designer|дизайнер)",
+      "(?is)^\\s*(добрый день|привет|коллеги).{0,160}(backend|java|golang|go)[- ]?(разработчик|developer).{0,180}(с\\s+\\d+\\s*(год|лет|года).{0,30}опыт|мой опыт|открыт к|рассматриваю предложени)",
+      "(?is)^\\s*(?:📍\\s*)?(навигаци[яи]?|оглавлени[ея]?|библиотека\\s+(go|java)[- ]?разработчика)(?:\\s|:|$)"
+    ],
+    "user_prompt": "Return true only for a single real job vacancy post for Java developer, Golang developer, Go developer, or backend developer where Java or Go is a main required technology. Return false for vacancy collections, navigation posts, resume/candidate posts, unrelated roles, spam, and posts where Java/Go are optional. If unsure, return false."
   }
 }

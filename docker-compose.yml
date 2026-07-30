@@ -28,6 +28,7 @@ services:
     volumes:
       - telegram_session:/app/session
       - ./runtime:/app/runtime
+      - ./resumes:/app/resumes:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,10 +47,60 @@ services:
     environment:
       POSTGRES_HOST: postgres
       DATABASE_URL: ""
+      TELEGRAM_PROXY_SCHEME: socks5
+      TELEGRAM_PROXY_HOST: 172.21.0.1
+      TELEGRAM_PROXY_PORT: "2081"
     command: ["python", "main.py"]
     volumes:
       - telegram_session:/app/session
       - ./runtime:/app/runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  vacancy-worker:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_HOST: postgres
+      DATABASE_URL: ""
+    command: ["python", "-m", "scripts.run_vacancy_worker"]
+    volumes:
+      - ./runtime:/app/runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  browser-worker:
+    profiles: ["browser"]
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/playwright/python:v1.52.0-noble
+        ENV PYTHONDONTWRITEBYTECODE=1 \
+            PYTHONUNBUFFERED=1 \
+            PIP_NO_CACHE_DIR=1
+        WORKDIR /app
+        COPY requirements.txt requirements-browser.txt ./
+        RUN pip install --upgrade pip && pip install -r requirements-browser.txt
+        COPY . .
+        RUN mkdir -p /app/runtime/browser_worker /app/runtime/browser_profiles /app/resumes
+    restart: unless-stopped
+    init: true
+    shm_size: "1gb"
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_HOST: postgres
+      DATABASE_URL: ""
+    command: ["python", "scripts/run_browser_worker.py"]
+    volumes:
+      - ./runtime:/app/runtime
+      - ./resumes:/app/resumes:ro
     depends_on:
       postgres:
         condition: service_healthy

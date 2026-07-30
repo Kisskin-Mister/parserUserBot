@@ -59,9 +59,10 @@ async def apply_to_vacancy(vacancy_id, message_text):
         )
         await db.add_vacancy_outbox_entry(vacancy_id, recruiter, "send_document", resume_path)
     
-    await db.update_vacancy_status(vacancy_id, 'applied')
+    # Enqueue is not delivery. Keep vacancy status unchanged until an external
+    # confirmation flow observes a successful Telegram message id.
     await db.add_interaction(recruiter)
-    return {"status": "success", "recruiter": recruiter}
+    return {"status": "queued", "recruiter": recruiter}
 
 async def ignore_vacancy(vacancy_id):
     await db.init()
